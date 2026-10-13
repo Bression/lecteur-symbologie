@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Symbologie">
+  <title>Identificateur de symbologie</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="scanner">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="overlay"></canvas>
+    <div id="frame" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <h1><img src="icons/keyence-blanc.png" alt="KEYENCE" class="brand"><span>Symbologie</span></h1>
+      <div class="topbar-actions">
+        <button id="btn-history" class="icon-btn" aria-label="Historique" title="Historique">
+          <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 0 0-9 9H1l4 4 4-4H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8H12z"/></svg>
+        </button>
+        <button id="btn-about" class="icon-btn" aria-label="Aide" title="Aide">
+          <svg viewBox="0 0 24 24"><path d="M11 18h2v-2h-2v2zm1-16a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm0-14a4 4 0 0 0-4 4h2a2 2 0 1 1 4 0c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5a4 4 0 0 0-4-4z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="status" class="status">Démarrage de la caméra…</div>
+
+    <div id="start-panel" class="start-panel hidden">
+      <p id="start-msg">La caméra n'est pas encore active.</p>
+      <button id="btn-start" class="primary">Activer la caméra</button>
+      <p class="muted small">Vous pouvez aussi analyser une photo avec le bouton <strong>Photo</strong>.</p>
+    </div>
+
+    <div id="zoom-wrap" class="zoom-wrap hidden">
+      <span>1×</span>
+      <input id="zoom" type="range" min="1" max="1" step="0.1" value="1" aria-label="Zoom">
+      <span id="zoom-max">1×</span>
+    </div>
+
+    <nav class="bottombar">
+      <label class="tool" id="btn-photo" title="Analyser une photo">
+        <input id="file" type="file" accept="image/*" hidden>
+        <svg viewBox="0 0 24 24"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
+        <span>Photo</span>
+      </label>
+      <button id="btn-torch" class="tool hidden" title="Lampe">
+        <svg viewBox="0 0 24 24"><path d="M6 2h12v5l-3 4v11H9V11L6 7V2zm2 2v2.33L11 10v10h2V10l3-3.67V4H8z"/></svg>
+        <span>Lampe</span>
+      </button>
+      <button id="btn-switch" class="tool hidden" title="Changer de caméra">
+        <svg viewBox="0 0 24 24"><path d="M20 5h-3.17L15 3H9L7.17 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm-5 11.5V14H9v2.5L5.5 13 9 9.5V12h6V9.5l3.5 3.5-3.5 3.5z"/></svg>
+        <span>Caméra</span>
+      </button>
+      <button id="btn-sound" class="tool" title="Son">
+        <svg viewBox="0 0 24 24"><path id="sound-path" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06A9 9 0 0 0 14 3.23z"/></svg>
+        <span id="sound-label">Bip</span>
+      </button>
+    </nav>
+  </main>
+
+  <!-- Résultat -->
+  <section id="result" class="sheet hidden" aria-modal="true" role="dialog" aria-labelledby="result-title">
+    <div class="sheet-head">
+      <h2 id="result-title">Résultat</h2>
+      <button id="btn-close-result" class="icon-btn" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div id="result-body" class="sheet-body"></div>
+    <div class="sheet-foot">
+      <button id="btn-rescan" class="primary wide">Scanner un autre code</button>
+    </div>
+  </section>
+
+  <!-- Historique -->
+  <section id="history" class="sheet hidden" aria-modal="true" role="dialog" aria-labelledby="history-title">
+    <div class="sheet-head">
+      <h2 id="history-title">Historique</h2>
+      <button id="btn-close-history" class="icon-btn" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body">
+      <p class="muted small">Stocké uniquement sur ce téléphone (200 derniers scans).</p>
+      <ul id="history-list" class="history-list"></ul>
+    </div>
+    <div class="sheet-foot row">
+      <button id="btn-export" class="secondary">Exporter CSV</button>
+      <button id="btn-clear" class="danger">Effacer</button>
+    </div>
+  </section>
+
+  <!-- Aide -->
+  <section id="about" class="sheet hidden" aria-modal="true" role="dialog" aria-labelledby="about-title">
+    <div class="sheet-head">
+      <h2 id="about-title">Aide</h2>
+      <button id="btn-close-about" class="icon-btn" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body prose">
+      <h3>Utilisation</h3>
+      <ul>
+        <li>Visez le code : l'analyse est automatique, le téléphone vibre et bipe à la lecture.</li>
+        <li>Pour un petit code, rapprochez-vous puis utilisez le zoom. Sur iPhone Pro, essayez le bouton <strong>Caméra</strong> pour passer sur l'objectif macro / ultra grand-angle.</li>
+        <li><strong>Photo</strong> : analyse une image de la galerie (par ex. une photo envoyée par le client). L'analyse y est plus poussée qu'en direct.</li>
+        <li>Plusieurs codes dans l'image : tous sont listés.</li>
+      </ul>
+      <h3>Installer sur le téléphone</h3>
+      <ul>
+        <li><strong>iPhone (Safari)</strong> : bouton Partager → « Sur l'écran d'accueil ».</li>
+        <li><strong>Android (Chrome)</strong> : menu ⋮ → « Installer l'application » / « Ajouter à l'écran d'accueil ».</li>
+      </ul>
+      <p>Une fois installée, l'appli fonctionne <strong>hors connexion</strong>.</p>
+      <h3>Confidentialité</h3>
+      <p>Le décodage est fait entièrement sur le téléphone. Aucune image ni donnée n'est envoyée sur Internet. L'historique reste dans le téléphone.</p>
+      <h3>Limites</h3>
+      <ul>
+        <li>Les codes en marquage direct (micro-percussion, gravure laser sur métal) sont souvent difficiles à lire avec un téléphone.</li>
+        <li>La « marge de correction restante » est indicative : ce n'est <strong>pas</strong> un grade de qualité ISO 15415 / 15416.</li>
+      </ul>
+      <p class="muted small" id="version-info"></p>
+    </div>
+  </section>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script src="knowledge.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
